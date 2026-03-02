@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import re
 from datetime import datetime, timezone
 
 import requests
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 EMAIL_HEADERS = {'Электронная почта'}
 TIMESTAMP_HEADERS = {'Отметка времени', 'Timestamp', 'timestamp', 'updated_at'}
