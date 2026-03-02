@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import csv
 import io
-import logging
 import re
 from datetime import datetime, timezone
 
 import requests
 
 from app.config import settings
-
-logger = logging.getLogger(__name__)
 
 EMAIL_HEADERS = {'Электронная почта'}
 TIMESTAMP_HEADERS = {'Отметка времени', 'Timestamp', 'timestamp', 'updated_at'}
@@ -73,8 +70,7 @@ def _build_sheet_url() -> str:
 
 
 def derive_studio_code(studio_name: str) -> str:
-    raw_name = _normalize_header(studio_name)
-    raw = ''.join(TRANSLIT.get(ch.lower(), ch) for ch in raw_name)
+    raw = ''.join(TRANSLIT.get(ch.lower(), ch) for ch in studio_name)
     raw = raw.upper()
     raw = re.sub(r'[^A-Z0-9]+', '_', raw)
     raw = re.sub(r'_+', '_', raw).strip('_')
@@ -115,9 +111,7 @@ def parse_sheet_rows() -> dict:
     normalized_rows: list[dict] = []
     issues: list[dict] = []
 
-    for idx, raw_row in enumerate(reader):
-        row = {_normalize_header(k): (v or '') for k, v in raw_row.items()}
-
+    for idx, row in enumerate(reader):
         ts_raw = _first_present(row, TIMESTAMP_HEADERS)
         parsed_ts = _parse_ts(ts_raw)
         event_time = parsed_ts or datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -128,39 +122,24 @@ def parse_sheet_rows() -> dict:
         period_raw = (row.get(PERIOD_HEADER) or '').strip()
         period_code, period_type = normalize_period(period_raw)
 
-        if not studio_name:
-            issue = {
+        if not studio_code:
+            issues.append({
                 'issue_code': 'missing_studio',
                 'message': f'Missing studio name in column {STUDIO_HEADER}',
                 'raw_value': studio_name,
                 'row_index': idx,
-            }
-            issues.append(issue)
-            logger.warning('sync_issue: %s', issue)
-            continue
-
-        if not studio_code:
-            issue = {
-                'issue_code': 'invalid_studio_code',
-                'message': f'Cannot derive studio_code from studio name: {studio_name}',
-                'raw_value': studio_name,
-                'row_index': idx,
-            }
-            issues.append(issue)
-            logger.warning('sync_issue: %s', issue)
+            })
             continue
 
         if not period_code:
-            issue = {
+            issues.append({
                 'issue_code': 'invalid_period',
                 'message': f'Cannot parse period: {period_raw}',
                 'raw_value': period_raw,
                 'row_index': idx,
                 'studio_code': studio_code,
                 'studio_name': studio_name,
-            }
-            issues.append(issue)
-            logger.warning('sync_issue: %s', issue)
+            })
             continue
 
         base = {
@@ -207,10 +186,6 @@ def _first_present(row: dict, candidates: set[str]) -> str:
         if val:
             return str(val).strip()
     return ''
-
-
-def _normalize_header(value: str | None) -> str:
-    return (value or '').replace('\ufeff', '').strip()
 
 
 def _parse_ts(ts_raw: str) -> datetime | None:
