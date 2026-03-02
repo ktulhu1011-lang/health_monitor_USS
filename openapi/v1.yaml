@@ -1,0 +1,433 @@
+openapi: 3.0.3
+info:
+  title: Health Monitor USS API
+  version: 1.0.0
+  description: |
+    API v1 информационного монитора «Здоровье УСС».
+servers:
+  - url: /
+security:
+  - ApiKeyAuth: []
+tags:
+  - name: dictionaries
+  - name: data
+  - name: ingest
+  - name: sync
+  - name: service
+paths:
+  /api/v1/studios:
+    get:
+      tags: [dictionaries]
+      summary: Список студий
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Studio'
+
+  /api/v1/periods:
+    get:
+      tags: [dictionaries]
+      summary: Список периодов
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Period'
+
+  /api/v1/metrics:
+    get:
+      tags: [dictionaries]
+      summary: Справочник метрик
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Metric'
+
+  /api/v1/data:
+    get:
+      tags: [data]
+      summary: Витрина по всем студиям за период
+      security: []
+      parameters:
+        - in: query
+          name: period_code
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataPeriodResponse'
+
+  /api/v1/data/studio/{studio_code}:
+    get:
+      tags: [data]
+      summary: Динамика по студии
+      security: []
+      parameters:
+        - in: path
+          name: studio_code
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudioTimelineResponse'
+
+  /api/v1/data/metric/{metric_code}:
+    get:
+      tags: [data]
+      summary: Сравнение студий по метрике за период
+      security: []
+      parameters:
+        - in: path
+          name: metric_code
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: period_code
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricComparisonResponse'
+
+  /api/v1/healthcheck:
+    get:
+      tags: [service]
+      summary: Состояние сервиса
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Healthcheck'
+
+  /api/v1/ingest:
+    post:
+      tags: [ingest]
+      summary: Загрузка данных для студии и периода
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+
+  /api/v1/ingest/batch:
+    post:
+      tags: [ingest]
+      summary: Пакетная загрузка данных
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/IngestRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: integer
+                  rejected:
+                    type: integer
+
+  /api/v1/refresh:
+    post:
+      tags: [sync]
+      summary: Ручной запуск синхронизации
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  started:
+                    type: boolean
+                  job_id:
+                    type: string
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Studio:
+      type: object
+      required: [studio_code, name, is_active]
+      properties:
+        studio_code:
+          type: string
+        name:
+          type: string
+        is_active:
+          type: boolean
+
+    Period:
+      type: object
+      required: [period_code, period_type, start_date, end_date]
+      properties:
+        period_code:
+          type: string
+        period_type:
+          type: string
+          enum: [month, quarter]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+
+    Metric:
+      type: object
+      required: [metric_code, name, group_code, value_type, is_required]
+      properties:
+        metric_code:
+          type: string
+        name:
+          type: string
+        group_code:
+          type: string
+          enum: [finance, portfolio, kpi]
+        value_type:
+          type: string
+          enum: [int, decimal]
+        unit:
+          type: string
+          nullable: true
+        is_required:
+          type: boolean
+
+    MetricValue:
+      type: object
+      required: [metric_code]
+      properties:
+        metric_code:
+          type: string
+        value:
+          oneOf:
+            - type: integer
+            - type: number
+              format: double
+            - type: 'null'
+        source:
+          type: string
+          enum: [google_sheet, api]
+        event_time:
+          type: string
+          format: date-time
+
+    DataPeriodItem:
+      type: object
+      required: [studio_code, period_code, values]
+      properties:
+        studio_code:
+          type: string
+        period_code:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricValue'
+
+    DataPeriodResponse:
+      type: object
+      required: [period_code, items]
+      properties:
+        period_code:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataPeriodItem'
+
+    StudioTimelinePoint:
+      type: object
+      required: [period_code, values]
+      properties:
+        period_code:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricValue'
+
+    StudioTimelineResponse:
+      type: object
+      required: [studio_code, from, to, points]
+      properties:
+        studio_code:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudioTimelinePoint'
+
+    MetricComparisonResponse:
+      type: object
+      required: [metric_code, period_code, rows]
+      properties:
+        metric_code:
+          type: string
+        period_code:
+          type: string
+        rows:
+          type: array
+          items:
+            type: object
+            required: [studio_code, value]
+            properties:
+              studio_code:
+                type: string
+              value:
+                oneOf:
+                  - type: integer
+                  - type: number
+                    format: double
+                  - type: 'null'
+              rank:
+                type: integer
+                nullable: true
+
+    Healthcheck:
+      type: object
+      required: [status, last_sync_at]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        processed_rows:
+          type: integer
+        quality_errors:
+          type: integer
+
+    IngestValue:
+      type: object
+      required: [metric_code, value]
+      properties:
+        metric_code:
+          type: string
+        value:
+          oneOf:
+            - type: integer
+            - type: number
+              format: double
+            - type: 'null'
+
+    IngestRequest:
+      type: object
+      required: [studio_code, period_code, source, event_time, values]
+      properties:
+        studio_code:
+          type: string
+        period_code:
+          type: string
+        source:
+          type: string
+          enum: [api]
+        event_time:
+          type: string
+          format: date-time
+        force:
+          type: boolean
+          default: false
+        comment:
+          type: string
+          nullable: true
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngestValue'
+
+    IngestResponse:
+      type: object
+      required: [accepted, issues]
+      properties:
+        accepted:
+          type: boolean
+        upserted_metrics:
+          type: integer
+        issues:
+          type: array
+          items:
+            type: object
+            required: [issue_code, message]
+            properties:
+              issue_code:
+                type: string
+              message:
+                type: string
