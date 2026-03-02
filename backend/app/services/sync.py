@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-import logging
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
@@ -9,8 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.db.models import DataQualityIssue, FactValue, Metric, Period, Studio, SyncState
 from app.services.google_sheets import parse_sheet_rows
-
-logger = logging.getLogger(__name__)
 
 
 def refresh_from_google_sheet(db: Session) -> dict:
@@ -28,7 +25,6 @@ def refresh_from_google_sheet(db: Session) -> dict:
             period_id=None,
             metric_id=None,
         )
-        logger.warning('sync_issue: %s', issue)
         issues += 1
 
     # last-write-wins by timestamp; fallback by row_index
@@ -114,7 +110,6 @@ def refresh_from_google_sheet(db: Session) -> dict:
     sync_state.quality_errors = issues
 
     db.commit()
-    logger.info('refresh_from_google_sheet completed: processed_rows=%s quality_errors=%s', processed, issues)
     return {'processed_rows': processed, 'quality_errors': issues, 'last_sync_at': sync_state.last_sync_at}
 
 
